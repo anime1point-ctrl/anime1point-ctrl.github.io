@@ -1,0 +1,37 @@
+name: Auto-Update Anime1Point Website
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-site:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch YouTube data and rebuild site
+        env:
+          YOUTUBE_API_KEY: ${{ vars.YOUTUBE_API_KEY }}
+          CHANNEL_ID: UC-OisRdfw9ewR9RjFi_kGPQ
+        run: python build_site.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "Anime1Point Bot"
+          git config user.email "anime1point-bot@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "Auto-update: synced with YouTube $(date +\'%Y-%m-%d %H:%M\')"
+          git push
