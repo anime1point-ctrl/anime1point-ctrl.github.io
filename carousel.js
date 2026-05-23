@@ -52,16 +52,18 @@ resetProgress();
 
   var style = document.createElement('style');
   style.textContent = [
+    /* iframe always non-interactive — taps pass through to card onclick */
     '.thumb-wrap .hover-preview-iframe{',
     '  position:absolute;top:0;left:0;width:100%;height:100%;',
-    '  border:none;z-index:3;opacity:0;',
-    '  transition:opacity 0.3s ease;pointer-events:none;}',
-    '.thumb-wrap .hover-preview-iframe.visible{opacity:1;pointer-events:auto;}',
+    '  border:none;z-index:3;opacity:0;pointer-events:none;',
+    '  transition:opacity 0.3s ease;}',
+    '.thumb-wrap .hover-preview-iframe.visible{opacity:1;}',
     '.video-card:hover .thumb-wrap .play-btn,',
     '.video-card.mob-playing .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}',
+    /* unmute pill — sits above iframe, needs its own pointer-events */
     '.unmute-btn{',
     '  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);',
-    '  z-index:5;background:rgba(0,0,0,0.75);color:#fff;',
+    '  z-index:6;background:rgba(0,0,0,0.75);color:#fff;',
     '  font-size:12px;font-weight:700;padding:5px 14px;',
     '  border-radius:20px;border:none;cursor:pointer;',
     '  white-space:nowrap;pointer-events:auto;}',
@@ -74,18 +76,24 @@ resetProgress();
   var activeCard    = null;
   var scrollTimer   = null;
   var hoverTimer    = null;
-
   function getVideoId(card) {
     var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'([^']+)'/);
     return m ? m[1] : null;
   }
 
-  function buildSrc(videoId, muted) {
+  function getTitle(card) {
+    var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'[^']+',\s*'([^']+)'/);
+    return m ? m[1] : '';
+  }
+
+  function buildSrc(videoId, muted, showControls) {
     return 'https://www.youtube.com/embed/' + videoId
       + '?autoplay=1&mute=' + (muted ? '1' : '0')
-      + '&controls=0&loop=1&playlist=' + videoId
+      + '&controls=' + (showControls ? '1' : '0')
+      + '&loop=1&playlist=' + videoId
       + '&modestbranding=1&rel=0&showinfo=0&playsinline=1';
   }
+
   function startPreview(card, muted) {
     var videoId = getVideoId(card);
     if (!videoId) return;
@@ -96,19 +104,25 @@ resetProgress();
     iframe.allow = 'autoplay; encrypted-media';
     iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('playsinline', '');
-    iframe.src = buildSrc(videoId, muted);
+    /* mobile: controls=1 so YouTube fullscreen button is available */
+    /* desktop: controls=0 for clean hover preview */
+    iframe.src = buildSrc(videoId, muted, isMobile);
     tw.appendChild(iframe);
     if (isMobile) {
-      var btn = document.createElement('button');
-      btn.className = 'unmute-btn' + (audioUnlocked ? ' hidden' : '');
-      btn.textContent = 'Tap for audio';
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        audioUnlocked = true;
-        iframe.src = buildSrc(videoId, false);
-        btn.classList.add('hidden');
-      });
-      tw.appendChild(btn);
+      /* unmute pill */
+      if (!audioUnlocked) {
+        var btn = document.createElement('button');
+        btn.className = 'unmute-btn';
+        btn.textContent = 'Tap for audio';
+        btn.addEventListener('touchend', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          audioUnlocked = true;
+          btn.classList.add('hidden');
+          iframe.src = buildSrc(videoId, false, true);
+        });
+        tw.appendChild(btn);
+      }
       card.classList.add('mob-playing');
     }
     requestAnimationFrame(function() {
@@ -163,22 +177,25 @@ resetProgress();
     if (activeCard) startPreview(activeCard, !audioUnlocked);
   }
 
-  function onScroll() {
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(pickAndPlay, 150);
-  }
-
   if (isMobile) {
-    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', function() {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(pickAndPlay, 150);
+    }, { passive: true });
     setTimeout(pickAndPlay, 600);
-    document.addEventListener('touchstart', function onTap() {
-      if (audioUnlocked) return;
+
+    /* first touchend on the unmute btn is handled inside startPreview */
+    /* first touchend anywhere else unlocks audio for active card */
+    document.addEventListener('touchend', function onFirstTap(e) {
+      /* if the tap was on the unmute btn, that handler runs first — skip here */
+      if (e.target && e.target.classList && e.target.classList.contains('unmute-btn')) return;
+      if (audioUnlocked) { document.removeEventListener('touchend', onFirstTap); return; }
       audioUnlocked = true;
-      document.removeEventListener('touchstart', onTap);
+      document.removeEventListener('touchend', onFirstTap);
       if (activeCard) {
         var vid = getVideoId(activeCard);
         var ifrm = activeCard.querySelector('.hover-preview-iframe');
-        if (ifrm && vid) ifrm.src = buildSrc(vid, false);
+        if (ifrm && vid) ifrm.src = buildSrc(vid, false, true);
         var b = activeCard.querySelector('.unmute-btn');
         if (b) b.classList.add('hidden');
       }
