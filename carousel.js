@@ -57,12 +57,10 @@ resetProgress();
     '  border:none;z-index:3;opacity:0;pointer-events:none;',
     '  transition:opacity 0.3s ease;}',
     '.thumb-wrap .hover-preview-iframe.visible{opacity:1;}',
-    /* once card is tapped, iframe becomes interactive */
-    '.video-card.mob-active .hover-preview-iframe{pointer-events:auto;}',
+    '.video-card.preview-active .hover-preview-iframe{pointer-events:auto;}',
     '.video-card:hover .thumb-wrap .play-btn,',
     '.video-card.mob-playing .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}',
-    /* kill blue focus ring on mobile tap */
-    '.video-card{outline:none;-webkit-tap-highlight-color:transparent;}',
+    '.video-card{outline:none;-webkit-tap-highlight-color:transparent;cursor:pointer;}',
     '.unmute-btn{',
     '  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);',
     '  z-index:6;background:rgba(0,0,0,0.75);color:#fff;',
@@ -80,9 +78,30 @@ resetProgress();
   var hoverTimer    = null;
 
   /* ── helpers ── */
+
+  /*
+   * getVideoId: reads video ID from data-vid (set by stripOnclick).
+   * Falls back to parsing onclick attr for any card not yet stripped.
+   */
   function getVideoId(card) {
-    /* on mobile we store id in data-vid after stripping onclick */
-    return card.dataset.vid || null;
+    if (card.dataset.vid) return card.dataset.vid;
+    var raw = card.getAttribute('onclick') || '';
+    var m = raw.match(/openModal\s*\(\s*'([^']+)'/);
+    return m ? m[1] : null;
+  }
+
+  /*
+   * stripOnclick — ALWAYS called for every card on all devices.
+   * Reads the video id from the inline onclick BEFORE removing it,
+   * stores it in data-vid, then removes onclick entirely so the
+   * popup modal can never fire on any device.
+   */
+  function stripOnclick(card) {
+    if (card.dataset.vid) return; // already done
+    var raw = card.getAttribute('onclick') || '';
+    var m = raw.match(/openModal\s*\(\s*'([^']+)'/);
+    if (m) card.dataset.vid = m[1];
+    card.removeAttribute('onclick');
   }
 
   function buildSrc(videoId, muted, controls) {
@@ -92,6 +111,7 @@ resetProgress();
       + '&loop=1&playlist=' + videoId
       + '&modestbranding=1&rel=0&showinfo=0&playsinline=1';
   }
+
   function startPreview(card, muted) {
     var videoId = getVideoId(card);
     if (!videoId) return;
@@ -133,7 +153,7 @@ resetProgress();
     var btn = tw.querySelector('.unmute-btn');
     if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
     card.classList.remove('mob-playing');
-    card.classList.remove('mob-active');
+    card.classList.remove('preview-active');
   }
 
   function unmuteActive() {
@@ -145,6 +165,7 @@ resetProgress();
     var btn = activeCard.querySelector('.unmute-btn');
     if (btn) btn.classList.add('hidden');
   }
+
   /* ── Desktop: mouseenter/leave ── */
   function attachHover(card) {
     if (card.dataset.hoverAttached) return;
@@ -156,6 +177,20 @@ resetProgress();
     card.addEventListener('mouseleave', function() {
       clearTimeout(hoverTimer);
       stopPreview(card);
+    });
+    /* Desktop tap/click: if preview is playing, activate controls; else open modal */
+    card.addEventListener('click', function(e) {
+      var iframe = card.querySelector('.hover-preview-iframe');
+      if (iframe) {
+        /* preview already showing — activate pointer-events so controls work */
+        card.classList.add('preview-active');
+        e.stopPropagation();
+      } else {
+        /* no preview — open the modal the normal way */
+        var vid = getVideoId(card);
+        var title = card.querySelector('.video-title') ? card.querySelector('.video-title').textContent : '';
+        if (vid) openModal(vid, title);
+      }
     });
   }
 
@@ -181,39 +216,25 @@ resetProgress();
   }
 
   /*
-   * stripOnclick — called once per card on mobile.
-   * Reads the video id from the inline onclick BEFORE removing it,
-   * stores it in data-vid, then removes onclick entirely.
-   * This is the only reliable way to prevent the popup modal from opening.
-   */
-  function stripOnclick(card) {
-    if (card.dataset.vid) return;
-    var raw = card.getAttribute('onclick') || '';
-    var m = raw.match(/openModal\s*\(\s*'([^']+)'/);
-    if (m) card.dataset.vid = m[1];
-    card.removeAttribute('onclick');
-  }
-
-  /*
    * attachMobileTap — handles tap on a card:
-   * - If preview is already playing, make iframe interactive (fullscreen works).
-   * - Unmute on first tap.
-   * No popup ever opens.
+   * - Activates preview-active so iframe pointer-events work (fullscreen).
+   * - Unmutes on first tap.
+   * No popup ever opens because onclick was already stripped.
    */
   function attachMobileTap(card) {
     if (card.dataset.mobileTap) return;
     card.dataset.mobileTap = '1';
     card.addEventListener('click', function() {
-      /* activate: make iframe interactive so YouTube controls work */
-      card.classList.add('mob-active');
-      /* unmute on first tap */
+      card.classList.add('preview-active');
       if (!audioUnlocked) unmuteActive();
     });
   }
 
   function attach(card) {
+    /* Always strip onclick first — on ALL devices, not just mobile.
+       This is the only reliable way to prevent the popup from firing. */
+    stripOnclick(card);
     if (isMobile) {
-      stripOnclick(card);
       attachMobileTap(card);
     } else {
       attachHover(card);
