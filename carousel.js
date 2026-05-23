@@ -52,17 +52,14 @@ resetProgress();
 
   var style = document.createElement('style');
   style.textContent = [
-    /* iframe default: visible and fully interactive once playing */
     '.thumb-wrap .hover-preview-iframe{',
     '  position:absolute;top:0;left:0;width:100%;height:100%;',
     '  border:none;z-index:3;opacity:0;',
     '  transition:opacity 0.3s ease;}',
     '.thumb-wrap .hover-preview-iframe.visible{',
     '  opacity:1;pointer-events:auto;}',
-    /* desktop only: hide play button on hover */
     '.video-card:hover .thumb-wrap .play-btn,',
     '.video-card.mob-playing .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}',
-    /* no blue tap ring */
     '.video-card{outline:none;-webkit-tap-highlight-color:transparent;cursor:pointer;}'
   ].join('');
   document.head.appendChild(style);
@@ -71,13 +68,30 @@ resetProgress();
   var activeCard  = null;
   var scrollTimer = null;
   var hoverTimer  = null;
+  var leaveTimer  = null;   /* desktop: debounce stop so iframe stays alive */
+  var mouseX = 0, mouseY = 0;
+
+  /* track mouse position globally so we can check if cursor is still over card */
+  if (!isMobile) {
+    document.addEventListener('mousemove', function(e) {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      /* if a card is currently previewing, cancel any pending stop when the
+         cursor is still within the card bounding rect (handles the case where
+         the cross-origin iframe swallows mousemove and triggers a false
+         mouseleave on the parent card) */
+      if (leaveTimer && activeCard) {
+        var r = activeCard.getBoundingClientRect();
+        if (mouseX >= r.left && mouseX <= r.right &&
+            mouseY >= r.top  && mouseY <= r.bottom) {
+          clearTimeout(leaveTimer);
+          leaveTimer = null;
+        }
+      }
+    }, { passive: true });
+  }
 
   /* ── helpers ── */
-
-  /*
-   * getVideoId: reads from data-vid (set by stripOnclick).
-   * Fallback parses onclick for safety.
-   */
   function getVideoId(card) {
     if (card.dataset.vid) return card.dataset.vid;
     var raw = card.getAttribute('onclick') || '';
@@ -85,10 +99,6 @@ resetProgress();
     return m ? m[1] : null;
   }
 
-  /*
-   * stripOnclick — called for EVERY card on ALL devices.
-   * Permanently removes onclick so popup modal can never open.
-   */
   function stripOnclick(card) {
     if (card.dataset.vid) return;
     var raw = card.getAttribute('onclick') || '';
@@ -98,7 +108,6 @@ resetProgress();
   }
 
   function buildSrc(videoId, muted) {
-    /* Always controls=1 so YouTube's own mute/fullscreen buttons are available */
     return 'https://www.youtube.com/embed/' + videoId
       + '?autoplay=1&mute=' + (muted ? '1' : '0')
       + '&controls=1'
@@ -118,6 +127,7 @@ resetProgress();
     iframe.setAttribute('playsinline', '');
     iframe.src = buildSrc(videoId, muted);
     tw.appendChild(iframe);
+    activeCard = card;
     card.classList.add('mob-playing');
     requestAnimationFrame(function() {
       requestAnimationFrame(function() { iframe.classList.add('visible'); });
@@ -125,6 +135,7 @@ resetProgress();
   }
 
   function stopPreview(card) {
+    if (activeCard === card) activeCard = null;
     var tw = card.querySelector('.thumb-wrap');
     if (!tw) return;
     var iframe = tw.querySelector('.hover-preview-iframe');
@@ -135,23 +146,39 @@ resetProgress();
     card.classList.remove('mob-playing');
   }
 
-  /* ── Desktop: mouseenter/leave ── */
+  /* ── Desktop: mouseenter/leave with debounce ── */
   function attachHover(card) {
     if (card.dataset.hoverAttached) return;
     card.dataset.hoverAttached = '1';
+
     card.addEventListener('mouseenter', function() {
+      /* cancel any pending stop (e.g. cursor returned from iframe area) */
+      clearTimeout(leaveTimer);
+      leaveTimer = null;
+      /* cancel pending start from a previous card */
       clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(function() { startPreview(card, false); }, 300);
+      hoverTimer = setTimeout(function() {
+        startPreview(card, false);   /* muted=false: audio plays immediately */
+      }, 200);
     });
-    card.addEventListener('mouseleave', function() {
+
+    card.addEventListener('mouseleave', function(e) {
+      /* Don't stop instantly — the cursor may be heading into the iframe
+         (cross-origin iframes cause a spurious mouseleave on the parent).
+         We cancel the stop in the global mousemove handler above if the
+         cursor is still within the card rect. */
       clearTimeout(hoverTimer);
-      stopPreview(card);
-    });
-    /* Desktop click while hovering: open modal (full watch experience) */
-    card.addEventListener('click', function() {
-      var vid = getVideoId(card);
-      var title = card.querySelector('.video-title') ? card.querySelector('.video-title').textContent : '';
-      if (vid) openModal(vid, title);
+      leaveTimer = setTimeout(function() {
+        /* Final check: is cursor still over this card? */
+        var r = card.getBoundingClientRect();
+        if (mouseX >= r.left && mouseX <= r.right &&
+            mouseY >= r.top  && mouseY <= r.bottom) {
+          leaveTimer = null;
+          return; /* still hovering — keep playing */
+        }
+        leaveTimer = null;
+        stopPreview(card);
+      }, 300);
     });
   }
 
@@ -177,10 +204,9 @@ resetProgress();
   }
 
   function attach(card) {
-    /* Always strip onclick on all devices to prevent popup */
     stripOnclick(card);
     if (isMobile) {
-      /* nothing extra needed — iframe is interactive as soon as visible */
+      /* iframe is interactive as soon as it fades in — no extra listeners needed */
     } else {
       attachHover(card);
     }
