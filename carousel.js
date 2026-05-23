@@ -52,21 +52,24 @@ resetProgress();
 
   var style = document.createElement('style');
   style.textContent = [
-    /* iframe always non-interactive — taps pass through to card onclick */
+    /* preview iframe — non-interactive by default, taps go to card */
     '.thumb-wrap .hover-preview-iframe{',
     '  position:absolute;top:0;left:0;width:100%;height:100%;',
     '  border:none;z-index:3;opacity:0;pointer-events:none;',
     '  transition:opacity 0.3s ease;}',
     '.thumb-wrap .hover-preview-iframe.visible{opacity:1;}',
+    /* when card is tapped on mobile, iframe becomes interactive for fullscreen */
+    '.video-card.mob-active .hover-preview-iframe{pointer-events:auto;}',
     '.video-card:hover .thumb-wrap .play-btn,',
     '.video-card.mob-playing .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}',
-    /* unmute pill — sits above iframe, needs its own pointer-events */
+    /* unmute pill */
     '.unmute-btn{',
     '  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);',
     '  z-index:6;background:rgba(0,0,0,0.75);color:#fff;',
     '  font-size:12px;font-weight:700;padding:5px 14px;',
     '  border-radius:20px;border:none;cursor:pointer;',
-    '  white-space:nowrap;pointer-events:auto;}',
+    '  white-space:nowrap;pointer-events:auto;',
+    '  display:flex;align-items:center;gap:6px;}',
     '.unmute-btn.hidden{display:none;}'
   ].join('');
   document.head.appendChild(style);
@@ -76,24 +79,20 @@ resetProgress();
   var activeCard    = null;
   var scrollTimer   = null;
   var hoverTimer    = null;
+
   function getVideoId(card) {
     var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'([^']+)'/);
     return m ? m[1] : null;
   }
 
-  function getTitle(card) {
-    var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'[^']+',\s*'([^']+)'/);
-    return m ? m[1] : '';
-  }
-
-  function buildSrc(videoId, muted, showControls) {
+  function buildSrc(videoId, muted, controls) {
     return 'https://www.youtube.com/embed/' + videoId
       + '?autoplay=1&mute=' + (muted ? '1' : '0')
-      + '&controls=' + (showControls ? '1' : '0')
+      + '&controls=' + (controls ? '1' : '0')
       + '&loop=1&playlist=' + videoId
       + '&modestbranding=1&rel=0&showinfo=0&playsinline=1';
   }
-
+  /* Start muted preview on a card */
   function startPreview(card, muted) {
     var videoId = getVideoId(card);
     if (!videoId) return;
@@ -104,27 +103,22 @@ resetProgress();
     iframe.allow = 'autoplay; encrypted-media';
     iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('playsinline', '');
-    /* mobile: controls=1 so YouTube fullscreen button is available */
-    /* desktop: controls=0 for clean hover preview */
+    /* mobile preview: muted, controls visible so fullscreen btn is accessible */
+    /* desktop preview: unmuted, no controls for clean look */
     iframe.src = buildSrc(videoId, muted, isMobile);
     tw.appendChild(iframe);
-    if (isMobile) {
-      /* unmute pill */
-      if (!audioUnlocked) {
-        var btn = document.createElement('button');
-        btn.className = 'unmute-btn';
-        btn.textContent = 'Tap for audio';
-        btn.addEventListener('touchend', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          audioUnlocked = true;
-          btn.classList.add('hidden');
-          iframe.src = buildSrc(videoId, false, true);
-        });
-        tw.appendChild(btn);
-      }
-      card.classList.add('mob-playing');
+    if (isMobile && !audioUnlocked) {
+      var btn = document.createElement('button');
+      btn.className = 'unmute-btn';
+      btn.innerHTML = '&#128263; Tap for audio';
+      btn.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        unmuteActive();
+      });
+      tw.appendChild(btn);
     }
+    card.classList.add('mob-playing');
     requestAnimationFrame(function() {
       requestAnimationFrame(function() { iframe.classList.add('visible'); });
     });
@@ -141,6 +135,38 @@ resetProgress();
     var btn = tw.querySelector('.unmute-btn');
     if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
     card.classList.remove('mob-playing');
+    card.classList.remove('mob-active');
+  }
+
+  /* Unmute the currently active card's iframe */
+  function unmuteActive() {
+    audioUnlocked = true;
+    if (!activeCard) return;
+    var videoId = getVideoId(activeCard);
+    var ifrm = activeCard.querySelector('.hover-preview-iframe');
+    if (ifrm && videoId) ifrm.src = buildSrc(videoId, false, true);
+    var btn = activeCard.querySelector('.unmute-btn');
+    if (btn) btn.classList.add('hidden');
+  }
+
+  /*
+   * activateCard — called when user taps a card on mobile.
+   * - Suppresses the openModal popup.
+   * - Makes the inline iframe interactive (pointer-events on) so
+   *   the YouTube fullscreen button inside it is tappable.
+   * - Unmutes audio (first tap unlocks audio policy).
+   */
+  function activateCard(card, e) {
+    /* Only intercept if this card already has a preview playing */
+    var tw = card.querySelector('.thumb-wrap');
+    if (!tw || !tw.querySelector('.hover-preview-iframe')) return;
+    /* Prevent the openModal popup from opening */
+    e.preventDefault();
+    e.stopPropagation();
+    /* Make iframe interactive so YouTube controls (incl. fullscreen) work */
+    card.classList.add('mob-active');
+    /* Unmute on first tap */
+    if (!audioUnlocked) unmuteActive();
   }
   /* --- Desktop: hover --- */
   function attachHover(card) {
@@ -156,7 +182,7 @@ resetProgress();
     });
   }
 
-  /* --- Mobile: scroll-based, only play most-visible card --- */
+  /* --- Mobile: scroll picks most-visible card to preview --- */
   function getVisibleRatio(card) {
     var r = card.getBoundingClientRect();
     var vph = window.innerHeight;
@@ -177,33 +203,31 @@ resetProgress();
     if (activeCard) startPreview(activeCard, !audioUnlocked);
   }
 
+  /* --- Mobile tap: intercept onclick, activate inline player --- */
+  function attachMobileTap(card) {
+    if (card.dataset.mobileTapAttached) return;
+    card.dataset.mobileTapAttached = '1';
+    /* Use click (fires after touchend) to intercept the onclick='openModal(...)' */
+    card.addEventListener('click', function(e) {
+      activateCard(card, e);
+    });
+  }
+
+  function attach(card) {
+    if (isMobile) {
+      attachMobileTap(card);
+    } else {
+      attachHover(card);
+    }
+  }
+
   if (isMobile) {
     window.addEventListener('scroll', function() {
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(pickAndPlay, 150);
     }, { passive: true });
+    /* Run once on load in case a card is already in view */
     setTimeout(pickAndPlay, 600);
-
-    /* first touchend on the unmute btn is handled inside startPreview */
-    /* first touchend anywhere else unlocks audio for active card */
-    document.addEventListener('touchend', function onFirstTap(e) {
-      /* if the tap was on the unmute btn, that handler runs first — skip here */
-      if (e.target && e.target.classList && e.target.classList.contains('unmute-btn')) return;
-      if (audioUnlocked) { document.removeEventListener('touchend', onFirstTap); return; }
-      audioUnlocked = true;
-      document.removeEventListener('touchend', onFirstTap);
-      if (activeCard) {
-        var vid = getVideoId(activeCard);
-        var ifrm = activeCard.querySelector('.hover-preview-iframe');
-        if (ifrm && vid) ifrm.src = buildSrc(vid, false, true);
-        var b = activeCard.querySelector('.unmute-btn');
-        if (b) b.classList.add('hidden');
-      }
-    }, { passive: true });
-  }
-
-  function attach(card) {
-    if (!isMobile) attachHover(card);
   }
 
   document.querySelectorAll('.video-card').forEach(attach);
