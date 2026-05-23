@@ -47,3 +47,78 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
   startAuto();
   resetProgress();
 })();
+
+/* ── Hover-to-preview ── */
+(function () {
+    var style = document.createElement('style');
+    style.textContent = [
+          '.thumb-wrap .hover-preview-iframe{',
+          '  position:absolute;top:0;left:0;width:100%;height:100%;',
+          '  border:none;z-index:3;opacity:0;',
+          '  transition:opacity 0.3s ease;pointer-events:none;}',
+          '.thumb-wrap .hover-preview-iframe.visible{opacity:1;pointer-events:auto;}',
+          '.video-card:hover .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}'
+        ].join('');
+    document.head.appendChild(style);
+
+   var hoverTimer = null;
+
+   function getVideoId(card) {
+         var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'([^']+)'/);
+         return m ? m[1] : null;
+   }
+
+   function startPreview(card) {
+         var videoId = getVideoId(card);
+         if (!videoId) return;
+         var thumbWrap = card.querySelector('.thumb-wrap');
+         if (!thumbWrap || thumbWrap.querySelector('.hover-preview-iframe')) return;
+         var iframe = document.createElement('iframe');
+         iframe.className = 'hover-preview-iframe';
+         iframe.allow = 'autoplay; encrypted-media';
+         iframe.setAttribute('allowfullscreen', '');
+         iframe.setAttribute('title', 'Preview');
+         iframe.src = 'https://www.youtube.com/embed/' + videoId
+           + '?autoplay=1&mute=0&controls=0&loop=1&playlist=' + videoId
+           + '&modestbranding=1&rel=0&showinfo=0';
+         thumbWrap.appendChild(iframe);
+         requestAnimationFrame(function () {
+                 requestAnimationFrame(function () { iframe.classList.add('visible'); });
+         });
+   }
+
+   function stopPreview(card) {
+         var iframe = card.querySelector('.hover-preview-iframe');
+         if (iframe) {
+                 iframe.classList.remove('visible');
+                 setTimeout(function () {
+                           if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                 }, 350);
+         }
+   }
+
+   function attachListeners(card) {
+         if (card.dataset.hoverPreviewAttached) return;
+         card.dataset.hoverPreviewAttached = 'true';
+         card.addEventListener('mouseenter', function () {
+                 clearTimeout(hoverTimer);
+                 hoverTimer = setTimeout(function () { startPreview(card); }, 300);
+         });
+         card.addEventListener('mouseleave', function () {
+                 clearTimeout(hoverTimer);
+                 stopPreview(card);
+         });
+   }
+
+   document.querySelectorAll('.video-card').forEach(attachListeners);
+
+   new MutationObserver(function (mutations) {
+         mutations.forEach(function (m) {
+                 m.addedNodes.forEach(function (node) {
+                           if (node.nodeType !== 1) return;
+                           if (node.classList && node.classList.contains('video-card')) attachListeners(node);
+                           if (node.querySelectorAll) node.querySelectorAll('.video-card').forEach(attachListeners);
+                 });
+         });
+   }).observe(document.body, { childList: true, subtree: true });
+})();
