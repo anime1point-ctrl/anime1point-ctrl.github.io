@@ -52,24 +52,23 @@ resetProgress();
 
   var style = document.createElement('style');
   style.textContent = [
-    /* preview iframe — non-interactive by default, taps go to card */
     '.thumb-wrap .hover-preview-iframe{',
     '  position:absolute;top:0;left:0;width:100%;height:100%;',
     '  border:none;z-index:3;opacity:0;pointer-events:none;',
     '  transition:opacity 0.3s ease;}',
     '.thumb-wrap .hover-preview-iframe.visible{opacity:1;}',
-    /* when card is tapped on mobile, iframe becomes interactive for fullscreen */
+    /* once card is tapped, iframe becomes interactive */
     '.video-card.mob-active .hover-preview-iframe{pointer-events:auto;}',
     '.video-card:hover .thumb-wrap .play-btn,',
     '.video-card.mob-playing .thumb-wrap .play-btn{opacity:0;transition:opacity 0.2s;}',
-    /* unmute pill */
+    /* kill blue focus ring on mobile tap */
+    '.video-card{outline:none;-webkit-tap-highlight-color:transparent;}',
     '.unmute-btn{',
     '  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);',
     '  z-index:6;background:rgba(0,0,0,0.75);color:#fff;',
     '  font-size:12px;font-weight:700;padding:5px 14px;',
     '  border-radius:20px;border:none;cursor:pointer;',
-    '  white-space:nowrap;pointer-events:auto;',
-    '  display:flex;align-items:center;gap:6px;}',
+    '  white-space:nowrap;pointer-events:auto;}',
     '.unmute-btn.hidden{display:none;}'
   ].join('');
   document.head.appendChild(style);
@@ -80,9 +79,10 @@ resetProgress();
   var scrollTimer   = null;
   var hoverTimer    = null;
 
+  /* ── helpers ── */
   function getVideoId(card) {
-    var m = (card.getAttribute('onclick') || '').match(/openModal\s*\(\s*'([^']+)'/);
-    return m ? m[1] : null;
+    /* on mobile we store id in data-vid after stripping onclick */
+    return card.dataset.vid || null;
   }
 
   function buildSrc(videoId, muted, controls) {
@@ -92,7 +92,6 @@ resetProgress();
       + '&loop=1&playlist=' + videoId
       + '&modestbranding=1&rel=0&showinfo=0&playsinline=1';
   }
-  /* Start muted preview on a card */
   function startPreview(card, muted) {
     var videoId = getVideoId(card);
     if (!videoId) return;
@@ -103,8 +102,7 @@ resetProgress();
     iframe.allow = 'autoplay; encrypted-media';
     iframe.setAttribute('allowfullscreen', '');
     iframe.setAttribute('playsinline', '');
-    /* mobile preview: muted, controls visible so fullscreen btn is accessible */
-    /* desktop preview: unmuted, no controls for clean look */
+    /* mobile: controls=1 so fullscreen btn is reachable; desktop: controls=0 */
     iframe.src = buildSrc(videoId, muted, isMobile);
     tw.appendChild(iframe);
     if (isMobile && !audioUnlocked) {
@@ -138,37 +136,16 @@ resetProgress();
     card.classList.remove('mob-active');
   }
 
-  /* Unmute the currently active card's iframe */
   function unmuteActive() {
     audioUnlocked = true;
     if (!activeCard) return;
-    var videoId = getVideoId(activeCard);
+    var vid = getVideoId(activeCard);
     var ifrm = activeCard.querySelector('.hover-preview-iframe');
-    if (ifrm && videoId) ifrm.src = buildSrc(videoId, false, true);
+    if (ifrm && vid) ifrm.src = buildSrc(vid, false, true);
     var btn = activeCard.querySelector('.unmute-btn');
     if (btn) btn.classList.add('hidden');
   }
-
-  /*
-   * activateCard — called when user taps a card on mobile.
-   * - Suppresses the openModal popup.
-   * - Makes the inline iframe interactive (pointer-events on) so
-   *   the YouTube fullscreen button inside it is tappable.
-   * - Unmutes audio (first tap unlocks audio policy).
-   */
-  function activateCard(card, e) {
-    /* Only intercept if this card already has a preview playing */
-    var tw = card.querySelector('.thumb-wrap');
-    if (!tw || !tw.querySelector('.hover-preview-iframe')) return;
-    /* Prevent the openModal popup from opening */
-    e.preventDefault();
-    e.stopPropagation();
-    /* Make iframe interactive so YouTube controls (incl. fullscreen) work */
-    card.classList.add('mob-active');
-    /* Unmute on first tap */
-    if (!audioUnlocked) unmuteActive();
-  }
-  /* --- Desktop: hover --- */
+  /* ── Desktop: mouseenter/leave ── */
   function attachHover(card) {
     if (card.dataset.hoverAttached) return;
     card.dataset.hoverAttached = '1';
@@ -182,7 +159,7 @@ resetProgress();
     });
   }
 
-  /* --- Mobile: scroll picks most-visible card to preview --- */
+  /* ── Mobile helpers ── */
   function getVisibleRatio(card) {
     var r = card.getBoundingClientRect();
     var vph = window.innerHeight;
@@ -203,18 +180,40 @@ resetProgress();
     if (activeCard) startPreview(activeCard, !audioUnlocked);
   }
 
-  /* --- Mobile tap: intercept onclick, activate inline player --- */
+  /*
+   * stripOnclick — called once per card on mobile.
+   * Reads the video id from the inline onclick BEFORE removing it,
+   * stores it in data-vid, then removes onclick entirely.
+   * This is the only reliable way to prevent the popup modal from opening.
+   */
+  function stripOnclick(card) {
+    if (card.dataset.vid) return;
+    var raw = card.getAttribute('onclick') || '';
+    var m = raw.match(/openModal\s*\(\s*'([^']+)'/);
+    if (m) card.dataset.vid = m[1];
+    card.removeAttribute('onclick');
+  }
+
+  /*
+   * attachMobileTap — handles tap on a card:
+   * - If preview is already playing, make iframe interactive (fullscreen works).
+   * - Unmute on first tap.
+   * No popup ever opens.
+   */
   function attachMobileTap(card) {
-    if (card.dataset.mobileTapAttached) return;
-    card.dataset.mobileTapAttached = '1';
-    /* Use click (fires after touchend) to intercept the onclick='openModal(...)' */
-    card.addEventListener('click', function(e) {
-      activateCard(card, e);
+    if (card.dataset.mobileTap) return;
+    card.dataset.mobileTap = '1';
+    card.addEventListener('click', function() {
+      /* activate: make iframe interactive so YouTube controls work */
+      card.classList.add('mob-active');
+      /* unmute on first tap */
+      if (!audioUnlocked) unmuteActive();
     });
   }
 
   function attach(card) {
     if (isMobile) {
+      stripOnclick(card);
       attachMobileTap(card);
     } else {
       attachHover(card);
@@ -226,7 +225,6 @@ resetProgress();
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(pickAndPlay, 150);
     }, { passive: true });
-    /* Run once on load in case a card is already in view */
     setTimeout(pickAndPlay, 600);
   }
 
