@@ -52,7 +52,8 @@ def get_latest_videos(n=8):
     items = yt('search', channelId=CHANNEL_ID, part='snippet',
                order='date', maxResults=n, type='video',
                videoDuration='medium').get('items',[])
-    return enrich(items)
+    result = enrich(items)
+    return sorted(result, key=lambda v: v['published'])
 
 def get_latest_shorts(n=6):
     items = yt('search', channelId=CHANNEL_ID, part='snippet',
@@ -275,4 +276,4 @@ if __name__ == '__main__':
     html = build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts)
     with open('index.html','w',encoding='utf-8') as f:
         f.write(html)
-    print('Done! Sections: Most Watched | Latest Uploads | Shorts | Community | Playlists')
+    print('Done! Sections: Most Watched | Latest Uploads | Shorts | Community | Playlists')h
