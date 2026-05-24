@@ -53,7 +53,7 @@ def get_latest_videos(n=8):
                order='date', maxResults=n, type='video',
                videoDuration='medium').get('items',[])
     result = enrich(items)
-    return sorted(result, key=lambda v: v['published'])
+    return sorted(result, key=lambda v: v['published'], reverse=True)
 
 def get_latest_shorts(n=6):
     items = yt('search', channelId=CHANNEL_ID, part='snippet',
@@ -146,7 +146,7 @@ def build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts):
         '<button class="dot'+(' active' if i==0 else '')+'" onclick="goToSlide('+str(i)+')"></button>'
         for i in range(len(carousel_vids)))
 
-    # Most Watched — rank badge (1st, 2nd, …)
+    # Most Watched â rank badge (1st, 2nd, â¦)
     mw_cards = '\n'.join(video_card(v, badge_text='#'+str(i+1)) for i,v in enumerate(most_watched))
 
     # Latest Videos
@@ -170,7 +170,7 @@ def build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts):
         '<meta charset="UTF-8"/>',
         '<meta name="viewport" content="width=device-width,initial-scale=1.0"/>',
         '<title>Anime1Point | Anime One Point | Anime Breakdown YouTube Channel</title>',
-        '<meta name="description" content="Anime1Point (Anime One Point) — anime breakdowns, That Time I Got Reincarnated as a Slime Season 4, Tensura lore, manga analysis."/>',
+        '<meta name="description" content="Anime1Point (Anime One Point) â anime breakdowns, That Time I Got Reincarnated as a Slime Season 4, Tensura lore, manga analysis."/>',
         '<meta name="keywords" content="Anime1Point,Anime One Point,AnimeOnePoint,Anime Point,anime breakdown,That Time I Got Reincarnated as a Slime,Tensura Season 4,Rimuru Tempest,Diablo"/>',
         '<meta property="og:title" content="Anime1Point | Anime One Point"/>',
         '<meta property="og:url" content="https://anime1point-ctrl.github.io"/>',
@@ -178,7 +178,7 @@ def build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts):
         '<link rel="stylesheet" href="style.css"/>',
         '</head>',
         '<body>',
-        # ── HERO CAROUSEL ────────────────────────────────────────────────
+        # ââ HERO CAROUSEL ââââââââââââââââââââââââââââââââââââââââââââââââ
         '<div class="carousel-wrap" id="carousel" onmouseenter="pauseCarousel()" onmouseleave="resumeCarousel()">',
         slides,
         '<button class="carousel-arrow prev" onclick="prevSlide()" aria-label="Previous">&#10094;</button>',
@@ -186,13 +186,13 @@ def build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts):
         '<div class="carousel-dots">'+dot_html+'</div>',
         '<div class="carousel-progress" id="carouselProgress"></div>',
         '</div>',
-        # ── HEADER ───────────────────────────────────────────────────────
+        # ââ HEADER âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<header>',
         '<h1>&#9654; Anime1Point</h1>',
         '<p class="tagline">Anime Breakdown &bull; Anime Explained &bull; Deep Story Analysis</p>',
         '</header>',
         '<div class="also-known">Also known as <span>Anime One Point</span> &bull; <span>AnimeOnePoint</span> &bull; <span>Anime Point</span> &bull; <span>Anime 1 Point</span></div>',
-        # ── NAV ──────────────────────────────────────────────────────────
+        # ââ NAV ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<nav>',
         '<a href="#most-watched">&#128293; Most Watched</a>',
         '<a href="#latest">&#128196; Latest</a>',
@@ -203,50 +203,50 @@ def build_html(carousel_vids, most_watched, latest_vids, latest_shorts, posts):
         '<a href="https://www.youtube.com/@anime1point" target="_blank" rel="noopener">&#9654; YouTube</a>',
         '</nav>',
         '<div class="container">',
-        # ── AUTO-UPDATE NOTICE ────────────────────────────────────────────
+        # ââ AUTO-UPDATE NOTICE ââââââââââââââââââââââââââââââââââââââââââââ
         '<p class="updated">&#128260; Last updated: '+updated+' &bull; All videos clickable &mdash; views count on YouTube!</p>',
-        # ── MOST WATCHED ─────────────────────────────────────────────────
+        # ââ MOST WATCHED âââââââââââââââââââââââââââââââââââââââââââââââââ
         section('&#128293;','Most Watched','most-watched', mw_cards,
                 'https://www.youtube.com/@anime1point/videos?sort=p','See All on YouTube'),
-        # ── LATEST VIDEOS ────────────────────────────────────────────────
+        # ââ LATEST VIDEOS ââââââââââââââââââââââââââââââââââââââââââââââââ
         section('&#128196;','Latest Uploads','latest', lv_cards,
                 'https://www.youtube.com/@anime1point/videos','See All Videos'),
-        # ── LATEST SHORTS ────────────────────────────────────────────────
+        # ââ LATEST SHORTS ââââââââââââââââââââââââââââââââââââââââââââââââ
         section('&#9889;','Latest Shorts','shorts', ls_cards,
                 'https://www.youtube.com/@anime1point/shorts','See All Shorts'),
-        # ── COMMUNITY POSTS ─────────────────────────────────────────────
+        # ââ COMMUNITY POSTS âââââââââââââââââââââââââââââââââââââââââââââ
         '<h2 class="section-title" id="community">&#128172; Community Posts</h2>',
         '<p class="section-sub">Latest updates, polls and announcements from Anime1Point.</p>',
         '<div class="posts-grid">'+pc_html+'</div>',
         '<div class="section-footer"><a href="https://www.youtube.com/@anime1point/community" target="_blank" rel="noopener" class="cta-btn cta-purple">&#9654; See All Community Posts</a></div>',
-        # ── PLAYLISTS ────────────────────────────────────────────────────
+        # ââ PLAYLISTS ââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<h2 class="section-title" id="playlists">&#128203; Playlists</h2>',
         '<div class="playlists">',
         '<div class="playlist-card"><div class="playlist-thumb"><img src="https://i.ytimg.com/vi/ZVmqQk1GbqE/maxresdefault.jpg" alt="Tensura S4 Reviews" loading="lazy"/><span class="playlist-count">16 videos</span></div><div class="playlist-info"><h3>Tensura Season 4 Reviews</h3><p>Full episode breakdown of That Time I Got Reincarnated as a Slime Season 4.</p><a href="https://www.youtube.com/@anime1point/playlists" target="_blank">Watch &rarr;</a></div></div>',
         '<div class="playlist-card"><div class="playlist-thumb"><img src="https://i.ytimg.com/vi/ommA4DBy5RQ/maxresdefault.jpg" alt="Tensura S4 Shorts" loading="lazy"/><span class="playlist-count">116+ videos</span></div><div class="playlist-info"><h3>Tensura Season 4 Shorts</h3><p>116+ short clips covering key moments and character breakdowns.</p><a href="https://www.youtube.com/@anime1point/playlists" target="_blank">Watch &rarr;</a></div></div>',
         '<div class="playlist-card"><div class="playlist-thumb"><img src="https://i.ytimg.com/vi/o_PazOqPg0I/maxresdefault.jpg" alt="Pokemon Play" loading="lazy"/><span class="playlist-count">113+ videos</span></div><div class="playlist-info"><h3>Pokemon Play</h3><p>113+ Pokemon-themed videos and quizzes. Can you guess them all?</p><a href="https://www.youtube.com/@anime1point/playlists" target="_blank">Watch &rarr;</a></div></div>',
         '</div>',
-        # ── ABOUT ────────────────────────────────────────────────────────
+        # ââ ABOUT ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<div class="about" id="about">',
         '<h2>About Anime1Point</h2>',
         '<p>Welcome to <strong>Anime1Point</strong> &mdash; also known as <strong>Anime One Point</strong>, <strong>AnimeOnePoint</strong>, and <strong>Anime Point</strong> &mdash; your ultimate destination for anime breakdowns on YouTube. We specialize in <strong>That Time I Got Reincarnated as a Slime (Tensura) Season 4</strong> episode reviews, manga analysis, anime lore deep dives, and story breakdowns covering Rimuru Tempest, Diablo, Milim Nava, Veldora, and the Primordial Demons.</p>',
         '<a href="https://www.youtube.com/@anime1point?sub_confirmation=1" class="cta-btn" target="_blank" rel="noopener">&#9654; Subscribe on YouTube</a>',
         '</div>',
-        # ── SUBSCRIBE BANNER ─────────────────────────────────────────────
+        # ââ SUBSCRIBE BANNER âââââââââââââââââââââââââââââââââââââââââââââ
         '<div class="sub-banner">',
         '<h2>&#9654; Join the Anime1Point Community</h2>',
         '<p>New episodes every week &bull; Tensura Season 4 &bull; Anime Breakdowns &bull; Manga Analysis</p>',
         '<a href="https://www.youtube.com/@anime1point?sub_confirmation=1" class="cta-btn" target="_blank" rel="noopener">Subscribe for Free</a>',
         '</div>',
-        # ── TAGS ─────────────────────────────────────────────────────────
+        # ââ TAGS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<h2 class="section-title">&#127991; Topics We Cover</h2>',
         '<div class="tags">',
         '<span class="tag">Anime1Point</span><span class="tag">Anime One Point</span><span class="tag">AnimeOnePoint</span><span class="tag">Anime Point</span><span class="tag">That Time I Got Reincarnated as a Slime</span><span class="tag">Tensura Season 4</span><span class="tag">Rimuru Tempest</span><span class="tag">Diablo Tensura</span><span class="tag">Milim Nava</span><span class="tag">Veldora</span><span class="tag">Anime Breakdown</span><span class="tag">Anime Explained</span><span class="tag">Manga Analysis</span><span class="tag">Anime Lore</span><span class="tag">Isekai Anime</span><span class="tag">Pokemon Quiz</span>',
         '</div>',
         '</div>',  # /container
-        # ── MODAL ────────────────────────────────────────────────────────
+        # ââ MODAL ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<div class="modal-overlay" id="videoModal" onclick="closeModalOutside(event)"><div class="modal-box"><button class="modal-close" onclick="closeModal()">&times;</button><div class="modal-title" id="modalTitle"></div><iframe id="modalIframe" src="" allowfullscreen allow="autoplay; encrypted-media"></iframe></div></div>',
-        # ── FOOTER ───────────────────────────────────────────────────────
+        # ââ FOOTER âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         '<footer>',
         '<p>&copy; 2026 <strong>Anime1Point</strong> (Anime One Point) &mdash; All Rights Reserved</p>',
         '<p style="margin-top:10px"><a href="https://www.youtube.com/@anime1point">YouTube</a> &bull; <a href="https://www.youtube.com/@anime1point/videos">Videos</a> &bull; <a href="https://www.youtube.com/@anime1point/shorts">Shorts</a> &bull; <a href="https://www.youtube.com/@anime1point/community">Community</a> &bull; <a href="https://www.youtube.com/@anime1point/playlists">Playlists</a></p>',
