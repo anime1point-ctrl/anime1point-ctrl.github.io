@@ -24,7 +24,7 @@ jobs:
 
       - name: Fetch YouTube data and rebuild site
         env:
-          YOUTUBE_API_KEY: ${{ vars.YOUTUBE_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           CHANNEL_ID: UC-OisRdfw9ewR9RjFi_kGPQ
         run: python build_site.py
 
